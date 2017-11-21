@@ -39,3 +39,6 @@ $tailRecursion = {
 # nothing but empty folders, including the start folder if that 
 # winds up as empty.
 & $tailRecursion -Path $path
+
+# Remove aged files only without removing empty folders
+# Get-ChildItem -Path $path *.* -Recurse -File | ?{$_.LastWriteTime -lt $last_writetime} | foreach {Write-Verbose "Removing '$($_.FullName)'."; Remove-Item -Force $_.FullName}
