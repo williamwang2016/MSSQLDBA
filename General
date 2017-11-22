@@ -1,0 +1,8 @@
+#Get Powershell Version
+$PSVersionTable.PSVersion
+
+#Comment
+<#
+Comments block
+#>
+
