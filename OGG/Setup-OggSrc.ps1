@@ -77,7 +77,7 @@ Invoke-Sqlcmd -ServerInstance $src_server -Query $query
 
 #Create the Oracle GoldenGate CDC cleanup job and associated objects
 Set-Location $ogg_src_home
-$command = "CMD /c ogg_cdc_cleanup_setup.bat createJob gg_user Cefjkj@7 Demo SQL1 ogg"
+$command = "CMD /c ogg_cdc_cleanup_setup.bat createJob gg_user xxxxxxx Demo SQL1 ogg"
 Invoke-Expression $command
 
 #Create Extract and Pump prm files
