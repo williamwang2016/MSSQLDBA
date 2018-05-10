@@ -222,3 +222,45 @@ $expr = @"
 
 Invoke-Command -Session $s -ScriptBlock {Invoke-Expression $Using:expr}
 
+#Edit Param Replicat
+$replicat_name = 'cdcrep'
+
+$statement = @"
+REPLICAT $replicat_name
+TARGETDB $tgt_dsn
+
+MAP dbo.*, TARGET dbo.*;
+"@
+
+Invoke-Command -Session $s -FilePath Edit-OggParam.ps1 -ArgumentList $tgt_ogg_home, $replicat_name, $statement
+
+
+#Add Replicat
+$ggsci_command = @"
+DBLOGIN SOURCEDB $tgt_dsn
+ADD CHECKPOINTTABLE ogg.ggcheck
+ADD REPLICAT $replicat_name, EXTTRAIL ./dirdat/$remote_trail_name, CHECKPOINTTABLE ogg.ggcheck
+"@
+
+Invoke-Command -Session $s -FilePath Invoke-GGSCI.ps1 -ArgumentList $tgt_ogg_home, $ggsci_command
+
+
+#Start Replicat
+$ggsci_command = @"
+START MGR
+START REPLICAT $replicat_name
+"@
+Invoke-Command -Session $s -FilePath Invoke-GGSCI.ps1 -ArgumentList $tgt_ogg_home, $ggsci_command
+
+Remove-PSSession $s
+
+#Start Extract
+$s = New-PSSession -ComputerName $src_server
+$ggsci_command = @"
+START MGR
+START EXTRACT $extract_name
+START EXTRACT $pump_name
+"@
+Invoke-Command -Session $s -FilePath Invoke-GGSCI.ps1 -ArgumentList $src_ogg_home, $ggsci_command
+
+Remove-PSSession $s
