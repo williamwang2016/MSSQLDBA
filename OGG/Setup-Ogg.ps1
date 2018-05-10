@@ -96,6 +96,26 @@ ADD TRANDATA dbo.*
 
 Invoke-Command -Session $s -FilePath Invoke-GGSCI.ps1 -ArgumentList $src_ogg_home, $ggsci_command
 
+
+#Remove the SQL Server CDC cleanup job
+$query = @"
+USE [$db_name]
+GO
+EXECUTE sys.sp_cdc_drop_job N'cleanup'
+GO
+"@
+
+Invoke-Sqlcmd -ServerInstance $src_server -Query $query
+
+
+#Create the Oracle GoldenGate CDC cleanup job and associated objects
+$expr = @"
+Set-Location $src_ogg_home
+cmd /c ogg_cdc_cleanup_setup.bat createJob gg_user Cefjkj@7 $db_name $src_server ogg
+"@
+Invoke-Command -Session $s -ScriptBlock {Invoke-Expression $Using:expr}
+
+
 #Edit Param Extract
 $extract_name = 'cdcext'
 $local_trail_name = 'ce'
@@ -104,11 +124,13 @@ $statement = @"
 EXTRACT $extract_name
 SOURCEDB $src_dsn
 EXTTRAIL ./dirdat/$local_trail_name
+--To support TLS 1.2, add the following param
+--DBOPTIONS DRIVER SQLNCLI11
 
 TABLE dbo.*;
 "@
 
-Invoke-Command -Session $s -FilePath Edit-OggParam.ps1 -ArgumentList $src_ogg_home, $extract_name, $statement
+Invoke-Command -Session $s -FilePath Create-OggParam.ps1 -ArgumentList $src_ogg_home, $extract_name, $statement
 
 
 #Add Extract
@@ -131,7 +153,7 @@ RMTTRAIL ./dirdat/$remote_trail_name
 TABLE dbo.*;
 "@
 
-Invoke-Command -Session $s -FilePath Edit-OggParam.ps1 -ArgumentList $src_ogg_home, $pump_name, $statement
+Invoke-Command -Session $s -FilePath Create-OggParam.ps1 -ArgumentList $src_ogg_home, $pump_name, $statement
 
 #Add Pump
 $ggsci_command = @"
@@ -232,7 +254,7 @@ TARGETDB $tgt_dsn
 MAP dbo.*, TARGET dbo.*;
 "@
 
-Invoke-Command -Session $s -FilePath Edit-OggParam.ps1 -ArgumentList $tgt_ogg_home, $replicat_name, $statement
+Invoke-Command -Session $s -FilePath Create-OggParam.ps1 -ArgumentList $tgt_ogg_home, $replicat_name, $statement
 
 
 #Add Replicat
