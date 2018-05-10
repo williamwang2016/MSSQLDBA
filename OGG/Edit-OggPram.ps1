@@ -1,3 +1,5 @@
+#Example: Invoke-Command -Session $s -FilePath Edit-OggPram.ps1 -ArgumentList $src_ogg_home, $pump_name, $statement
+
 Param
 (
     [string] $ogg_home,
