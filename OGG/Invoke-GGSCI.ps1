@@ -1,4 +1,8 @@
-#Example: Invoke-Command -Session $s -FilePath Invoke-GGSCI.ps1 -ArgumentList $src_ogg_home, $ggsci_command
+############################
+##Execute GGSCI commands
+##Example: 
+##Invoke-Command -Session $s -FilePath Invoke-GGSCI.ps1 -ArgumentList $src_ogg_home, $ggsci_command
+############################
 
 Param
 (
