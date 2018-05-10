@@ -7,6 +7,8 @@ $tgt_ogg_home = 'C:\OGG'
 $src_dsn = 'ogg_dsn'
 $tgt_dsn = 'ogg_dsn'
 
+Set-Location $PSScriptRoot
+$s = New-PSSession -ComputerName $src_server
 
 ############################
 ##Execute GGSCI commands
@@ -17,8 +19,6 @@ DBLOGIN SOURCEDB $src_dsn
 ADD TRANDATA dbo.*
 "@
 
-Set-Location $PSScriptRoot
-$s = New-PSSession -ComputerName $src_server
 Invoke-Command -Session $s -FilePath Invoke-GGSCI.ps1 -ArgumentList $src_ogg_home, $ggsci_command
 
 ############################
