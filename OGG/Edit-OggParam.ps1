@@ -1,4 +1,10 @@
-#Example: Invoke-Command -Session $s -FilePath Edit-OggPram.ps1 -ArgumentList $src_ogg_home, $pump_name, $statement
+############################
+##Create/Edit Param file
+##Example:
+##Invoke-Command -Session $s -FilePath Edit-OggPram.ps1 -ArgumentList $src_ogg_home, $pump_name, $statementInvoke-Command -Session $s -FilePath Edit-OggPram.ps1 -ArgumentList $ogg_home, $proc_name, $statement
+##(TBD) Add -append switch
+############################
+
 
 Param
 (
