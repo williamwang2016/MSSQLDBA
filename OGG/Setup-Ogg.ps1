@@ -96,6 +96,24 @@ ADD TRANDATA dbo.*
 
 Invoke-Command -Session $s -FilePath Invoke-GGSCI.ps1 -ArgumentList $src_ogg_home, $ggsci_command
 
+#Change CDC job polling interval
+$query = @"
+USE $db_name
+GO
+--changes polling interveral from 5 seconds to 1 second
+EXEC [sys].[sp_cdc_change_job] @job_type = N'capture', @pollinginterval = 1
+GO
+WAITFOR DELAY '00:00:01'
+--stops cdc job
+EXEC [sys].[sp_cdc_stop_job] @job_type = N'capture'
+GO
+WAITFOR DELAY '00:00:01'
+--restarts cdc job for new polling interval to take affect
+EXEC [sys].[sp_cdc_start_job] @job_type = N'capture'
+GO
+"@
+
+Invoke-Sqlcmd -ServerInstance $src_server -Query $query
 
 #Remove the SQL Server CDC cleanup job
 $query = @"
@@ -125,7 +143,7 @@ EXTRACT $extract_name
 SOURCEDB $src_dsn
 EXTTRAIL ./dirdat/$local_trail_name
 --To support TLS 1.2, add the following param
---DBOPTIONS DRIVER SQLNCLI11
+DBOPTIONS DRIVER SQLNCLI11
 
 TABLE dbo.*;
 "@
@@ -286,3 +304,94 @@ START EXTRACT $pump_name
 Invoke-Command -Session $s -FilePath Invoke-GGSCI.ps1 -ArgumentList $src_ogg_home, $ggsci_command
 
 Remove-PSSession $s
+
+
+#Check Status
+Start-Sleep 5
+$ggsci_command = @"
+INFO ALL
+"@
+Invoke-Command -ComputerName $src_server -FilePath Invoke-GGSCI.ps1 -ArgumentList $src_ogg_home, $ggsci_command
+Invoke-Command -ComputerName $tgt_server -FilePath Invoke-GGSCI.ps1 -ArgumentList $tgt_ogg_home, $ggsci_command
+
+
+############################
+##Remove GG
+############################
+#DELETE EXT
+$ggsci_command = @"
+STOP ER *
+STOP mgr!
+DBLOGIN SOURCEDB $src_dsn
+DELETE TRANDATA dbo.*
+DELETE *!
+"@
+
+Invoke-Command -ComputerName $src_server -FilePath Invoke-GGSCI.ps1 -ArgumentList $src_ogg_home, $ggsci_command
+
+#DELETE REP
+$ggsci_command = @"
+STOP ER *
+STOP mgr!
+DBLOGIN SOURCEDB $tgt_dsn
+DELETE REPLICAT *!
+DELETE CHECKPOINTTABLE ogg.ggcheck!
+"@
+
+Invoke-Command -ComputerName $tgt_server -FilePath Invoke-GGSCI.ps1 -ArgumentList $tgt_ogg_home, $ggsci_command
+
+
+#Uninstall
+$expr = @"
+Set-Location $src_ogg_home
+CMD /c install deleteevents deleteservice
+"@
+Invoke-Command -ComputerName $src_server -ScriptBlock {Invoke-Expression $Using:expr}
+
+$expr = @"
+Set-Location $tgt_ogg_home
+CMD /c install deleteevents deleteservice
+"@
+Invoke-Command -ComputerName $tgt_server -ScriptBlock {Invoke-Expression $Using:expr}
+
+
+#Delete dirdat/*
+Invoke-Command -ComputerName $src_server -ScriptBlock {Remove-Item $Using:src_ogg_home/dirdat/*}
+Invoke-Command -ComputerName $tgt_server -ScriptBlock {Remove-Item $Using:tgt_ogg_home/dirdat/*}
+
+#Delete Oracle GoldenGate CDC Cleanup job
+$expr = @"
+Set-Location $src_ogg_home
+cmd /c ogg_cdc_cleanup_setup.bat dropJob gg_user Cefjkj@7 $db_name $src_server ogg
+"@
+Invoke-Command -ComputerName $src_server -ScriptBlock {Invoke-Expression $Using:expr}
+
+###################################
+#RESTART PROC
+###################################
+#Restart Replicat
+$ggsci_command = @"
+STOP REPLICAT $replicat_name
+START REPLICAT $replicat_name
+"@
+Invoke-Command -ComputerName $tgt_server -FilePath Invoke-GGSCI.ps1 -ArgumentList $tgt_ogg_home, $ggsci_command
+
+
+#Restart Extract
+$ggsci_command = @"
+STOP EXTRACT $extract_name
+STOP EXTRACT $pump_name
+START EXTRACT $extract_name
+START EXTRACT $pump_name
+"@
+Invoke-Command -ComputerName $src_server -FilePath Invoke-GGSCI.ps1 -ArgumentList $src_ogg_home, $ggsci_command
+
+
+
+#Check Status
+Start-Sleep 5
+$ggsci_command = @"
+INFO ALL
+"@
+Invoke-Command -ComputerName $src_server -FilePath Invoke-GGSCI.ps1 -ArgumentList $src_ogg_home, $ggsci_command
+Invoke-Command -ComputerName $tgt_server -FilePath Invoke-GGSCI.ps1 -ArgumentList $tgt_ogg_home, $ggsci_command
