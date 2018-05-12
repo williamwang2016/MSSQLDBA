@@ -2,27 +2,27 @@ SELECT * FROM msdb.dbo.view_ddl WHERE is_completed = 0 ORDER BY id
 select * from msdb.dbo.ddl_event
 truncate table msdb.dbo.ddl_event
 
-:connect lvs1-ieodn-001
+:connect sqlserver-0
 --delete from demo.dbo.t1
 insert into demo.dbo.t1 values (1)
 go
 select count(*) from demo.dbo.t1
 go
 
-:connect lvs1-ieodn-002
+:connect sqlserver-1
 select count(*) from demo.dbo.t1
 go
 
 select * from msdb.dbo.ddl_event
 
-:connect lvs1-ieodn-001
+:connect sqlserver-0
 --delete from demo.dbo.t1
 insert into demo.testch.t3 values (2, 'b')
 go
 select * from demo.testch.t3
 go
 
-:connect lvs1-ieodn-002
+:connect sqlserver-1
 select * from demo.testch.t3
 go
 
