@@ -26,7 +26,7 @@ function Install-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $Sour
 
     $s = New-PSSession -ComputerName $SourceComputerName
 
-    #CREATE SUBDIRS
+    #1. CREATE SUBDIRS
     $ggsci_command = @"
     CREATE SUBDIRS
 "@
@@ -34,21 +34,21 @@ function Install-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $Sour
     Invoke-Command -Session $s -FilePath Invoke-GGSCI.ps1 -ArgumentList $SourceOggHome, $ggsci_command
 
 
-    #Install OGG as a service
+    #2. Install OGG as a service
     $expr = @"
     $SourceOggHome\Install ADDSERVICE ADDEVENTS
 "@
     Invoke-Command -Session $s -ScriptBlock {Invoke-Expression $Using:expr}
 
 
-    #Create mgr.prm
+    #3. Create mgr.prm
     $expr = @"
     "PORT $SourceMgrPort" | Out-File -FilePath $SourceOggHome\dirprm\mgr.prm -Encoding ascii
 "@
     Invoke-Command -Session $s -ScriptBlock {Invoke-Expression $Using:expr}
 
 
-    #Create Database
+    #4. Create Database
     $query = @"
     USE [master]
     GO
@@ -83,7 +83,7 @@ function Install-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $Sour
     Invoke-Sqlcmd -ServerInstance $SourceComputerName -Query $query
 
 
-    #Create DSN
+    #5. Create DSN
     $expr = @"
     Get-OdbcDsn -Name $SourceDsnName -ErrorAction SilentlyContinue | Remove-OdbcDsn 
     Add-OdbcDsn -Name $SourceDsnName -DriverName "SQL Server Native Client 11.0" -DsnType "System" -SetPropertyValue @("Server=$SourceComputerName", "Trusted_Connection=Yes", "Database=$DatabaseName")
@@ -92,7 +92,7 @@ function Install-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $Sour
     Invoke-Command -Session $s -ScriptBlock {Invoke-Expression $Using:expr}
 
 
-    #Create GLOBALS on src
+    #6. Create GLOBALS on src
     $expr = @"
     'GGSCHEMA ogg' | Out-File -FilePath $SourceOggHome\GLOBALS -Encoding ascii
 "@
@@ -100,7 +100,7 @@ function Install-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $Sour
     Invoke-Command -Session $s -ScriptBlock {Invoke-Expression $Using:expr}
 
 
-    #ADD TRANDATA
+    #7. ADD TRANDATA
     $ggsci_command = @"
     DBLOGIN SOURCEDB $SourceDsnName
     ADD TRANDATA dbo.*
@@ -109,7 +109,7 @@ function Install-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $Sour
 
     Invoke-Command -Session $s -FilePath Invoke-GGSCI.ps1 -ArgumentList $SourceOggHome, $ggsci_command
 
-    #Change CDC job polling interval
+    #8. Change CDC job polling interval
     $query = @"
     USE $DatabaseName
     GO
@@ -128,7 +128,7 @@ function Install-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $Sour
 
     Invoke-Sqlcmd -ServerInstance $SourceComputerName -Query $query
 
-    #Remove the SQL Server CDC cleanup job
+    #9. Remove the SQL Server CDC cleanup job
     $query = @"
     USE [$DatabaseName]
     GO
@@ -139,7 +139,7 @@ function Install-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $Sour
     Invoke-Sqlcmd -ServerInstance $SourceComputerName -Query $query
 
 
-    #Create the Oracle GoldenGate CDC cleanup job and associated objects
+    #10. Create the Oracle GoldenGate CDC cleanup job and associated objects
     $expr = @"
     Set-Location $SourceOggHome
     cmd /c ogg_cdc_cleanup_setup.bat createJob gg_user Pass@word01! $DatabaseName $SourceComputerName ogg
@@ -147,7 +147,7 @@ function Install-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $Sour
     Invoke-Command -Session $s -ScriptBlock {Invoke-Expression $Using:expr}
 
 
-    #Edit Param Extract
+    #11. Edit Param Extract
 
     $statement = @"
     EXTRACT $ExtractName
@@ -162,7 +162,7 @@ function Install-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $Sour
     Invoke-Command -Session $s -FilePath Create-OggParam.ps1 -ArgumentList $SourceOggHome, $ExtractName, $statement
 
 
-    #Add Extract
+    #12. Add Extract
     $ggsci_command = @"
     ADD EXTRACT $ExtractName, TRANLOG, BEGIN NOW
     ADD EXTTRAIL ./dirdat/$LocalTrailName, EXTRACT $ExtractName
@@ -170,7 +170,7 @@ function Install-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $Sour
 
     Invoke-Command -Session $s -FilePath Invoke-GGSCI.ps1 -ArgumentList $SourceOggHome, $ggsci_command
 
-    #Edit Param Pump
+    #13. Edit Param Pump
     $statement = @"
     EXTRACT $PumpName
     RMTHOST $TargetComputerName MGRPORT $TargetMgrPort
@@ -181,7 +181,7 @@ function Install-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $Sour
 
     Invoke-Command -Session $s -FilePath Create-OggParam.ps1 -ArgumentList $SourceOggHome, $PumpName, $statement
 
-    #Add Pump
+    #14. Add Pump
     $ggsci_command = @"
     ADD EXTRACT $PumpName, EXTTRAILSOURCE ./dirdat/$LocalTrailName
     ADD RMTTRAIL ./dirdat/$RemoteTrailName, EXTRACT $PumpName
@@ -189,7 +189,7 @@ function Install-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $Sour
 
     Invoke-Command -Session $s -FilePath Invoke-GGSCI.ps1 -ArgumentList $SourceOggHome, $ggsci_command
 
-    #Add HeartBeatTable
+    #15. Add HeartBeatTable
     $ggsci_command = @"
     DBLOGIN SOURCEDB $SourceDsnName
     ADD HEARTBEATTABLE
@@ -208,7 +208,7 @@ function Install-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $Sour
 
     $s = New-PSSession -ComputerName $TargetComputerName
 
-    #CREATE SUBDIRS
+    #16. CREATE SUBDIRS
     $ggsci_command = @"
     CREATE SUBDIRS
 "@
@@ -216,21 +216,21 @@ function Install-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $Sour
     Invoke-Command -Session $s -FilePath Invoke-GGSCI.ps1 -ArgumentList $TargetOggHome, $ggsci_command
 
 
-    #Install OGG as a service
+    #17. Install OGG as a service
     $expr = @"
     $TargetOggHome\Install ADDSERVICE ADDEVENTS
 "@
     Invoke-Command -Session $s -ScriptBlock {Invoke-Expression $Using:expr}
 
 
-    #Create mgr.prm
+    #18. Create mgr.prm
     $expr = @"
     "PORT $TargetMgrPort" | Out-File -FilePath $TargetOggHome\dirprm\mgr.prm -Encoding ascii
 "@
     Invoke-Command -Session $s -ScriptBlock {Invoke-Expression $Using:expr}
 
 
-    #Create Database
+    #18. Create Database
     $query = @"
     USE [master]
     GO
@@ -265,7 +265,7 @@ function Install-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $Sour
     Invoke-Sqlcmd -ServerInstance $TargetComputerName -Query $query
 
 
-    #Create DSN
+    #19. Create DSN
     $expr = @"
     Get-OdbcDsn -Name $TargetDsnName -ErrorAction SilentlyContinue | Remove-OdbcDsn 
     Add-OdbcDsn -Name $TargetDsnName -DriverName "SQL Server Native Client 11.0" -DsnType "System" -SetPropertyValue @("Server=$TargetComputerName", "Trusted_Connection=Yes", "Database=$DatabaseName")
@@ -274,14 +274,14 @@ function Install-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $Sour
     Invoke-Command -Session $s -ScriptBlock {Invoke-Expression $Using:expr}
 
 
-    #Create GLOBALS on tgt
+    #20. Create GLOBALS on tgt
     $expr = @"
     'GGSCHEMA ogg' | Out-File -FilePath $TargetOggHome\GLOBALS -Encoding ascii
 "@
 
     Invoke-Command -Session $s -ScriptBlock {Invoke-Expression $Using:expr}
 
-    #Edit Param Replicat
+    #21. Edit Param Replicat
     $statement = @"
     REPLICAT $ReplicatName
     TARGETDB $TargetDsnName
@@ -292,7 +292,7 @@ function Install-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $Sour
     Invoke-Command -Session $s -FilePath Create-OggParam.ps1 -ArgumentList $TargetOggHome, $ReplicatName, $statement
 
 
-    #Add Replicat
+    #22. Add Replicat
     $ggsci_command = @"
     DBLOGIN SOURCEDB $TargetDsnName
     ADD CHECKPOINTTABLE ogg.ggcheck
@@ -301,7 +301,7 @@ function Install-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $Sour
 
     Invoke-Command -Session $s -FilePath Invoke-GGSCI.ps1 -ArgumentList $TargetOggHome, $ggsci_command
 
-    #Add HeartBeatTable
+    #23. Add HeartBeatTable
     $ggsci_command = @"
     DBLOGIN SOURCEDB $TargetDsnName
     ADD HEARTBEATTABLE
@@ -310,7 +310,7 @@ function Install-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $Sour
     Invoke-Command -Session $s -FilePath Invoke-GGSCI.ps1 -ArgumentList $TargetOggHome, $ggsci_command
 
 
-    #Disable jobs resulted from ADD HEARTBEATTABLE on target
+    #24. Disable jobs resulted from ADD HEARTBEATTABLE on target
     $query = @"
     EXEC msdb.dbo.sp_update_job @job_name = N'cdc.$($DatabaseName)_capture', @enabled = 0
     EXEC msdb.dbo.sp_update_job @job_name = N'cdc.$($DatabaseName)_cleanup', @enabled = 0
@@ -320,7 +320,7 @@ function Install-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $Sour
     Invoke-Sqlcmd -ServerInstance $TargetComputerName -Query $query
 
 
-    #Start Replicat
+    #25. Start Replicat
     $ggsci_command = @"
     START MGR
     START REPLICAT $ReplicatName
@@ -329,7 +329,7 @@ function Install-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $Sour
 
     Remove-PSSession $s
 
-    #Start Extract
+    #26. Start Extract
     $s = New-PSSession -ComputerName $SourceComputerName
     $ggsci_command = @"
     START MGR
@@ -341,7 +341,7 @@ function Install-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $Sour
     Remove-PSSession $s
 
 
-    #Check Status
+    #27. Check Status
     Start-Sleep 5
     $ggsci_command = @"
     INFO ALL
@@ -450,7 +450,6 @@ START REPLICAT $replicat_name
 "@
 Invoke-Command -ComputerName $tgt_server -FilePath Invoke-GGSCI.ps1 -ArgumentList $tgt_ogg_home, $ggsci_command
 
-
 #Restart Extract
 $ggsci_command = @"
 STOP EXTRACT $extract_name
@@ -462,6 +461,34 @@ Invoke-Command -ComputerName $src_server -FilePath Invoke-GGSCI.ps1 -ArgumentLis
 
 
 
+#Stop Replicat
+$ggsci_command = @"
+STOP REPLICAT $replicat_name
+"@
+Invoke-Command -ComputerName $tgt_server -FilePath Invoke-GGSCI.ps1 -ArgumentList $tgt_ogg_home, $ggsci_command
+
+#Stop Extract
+$ggsci_command = @"
+STOP EXTRACT $extract_name
+STOP EXTRACT $pump_name
+"@
+Invoke-Command -ComputerName $src_server -FilePath Invoke-GGSCI.ps1 -ArgumentList $src_ogg_home, $ggsci_command
+
+
+#Start Replicat
+$ggsci_command = @"
+START REPLICAT $replicat_name
+"@
+Invoke-Command -ComputerName $tgt_server -FilePath Invoke-GGSCI.ps1 -ArgumentList $tgt_ogg_home, $ggsci_command
+
+#Start Extract
+$ggsci_command = @"
+START EXTRACT $extract_name
+START EXTRACT $pump_name
+"@
+Invoke-Command -ComputerName $src_server -FilePath Invoke-GGSCI.ps1 -ArgumentList $src_ogg_home, $ggsci_command
+
+
 #Check Status
 Start-Sleep 5
 $ggsci_command = @"
@@ -469,3 +496,11 @@ INFO ALL
 "@
 Invoke-Command -ComputerName $src_server -FilePath Invoke-GGSCI.ps1 -ArgumentList $src_ogg_home, $ggsci_command
 Invoke-Command -ComputerName $tgt_server -FilePath Invoke-GGSCI.ps1 -ArgumentList $tgt_ogg_home, $ggsci_command
+
+
+#INFO TRANDATA
+$ggsci_command = @"
+DBLOGIN SOURCEDB $src_dsn
+INFO TRANDATA *.*
+"@
+Invoke-Command -ComputerName $src_server -FilePath Invoke-GGSCI.ps1 -ArgumentList $src_ogg_home, $ggsci_command
