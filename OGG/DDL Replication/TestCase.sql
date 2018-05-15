@@ -13,6 +13,8 @@ DROP TABLE dbo.t1
 DROP TABLE dbo.t2
 GO
 
+
+SELECT OBJECT_ID('[testch].[t1]')
 CREATE SCHEMA testch
 GO
 CREATE TABLE testch.t2 (c1 INT)
@@ -28,7 +30,7 @@ GO
 
 
 
-
+drop table [companytx]
 
 CREATE TABLE [dbo].[companytx] 
   ( 
@@ -65,23 +67,20 @@ go
 CREATE SEQUENCE seq_companytxid
     START WITH 1  
     INCREMENT BY 2 ; 
-GO  
+GO
 ALTER TABLE [dbo].[companytx] 
-  ADD DEFAULT (next value FOR [seq_companytxid]) FOR [CompanyTxID] 
-
-go 
+  ADD DEFAULT (next value FOR [seq_companytxid]) FOR [CompanyTxID]
+GO 
 
 ALTER TABLE [dbo].[companytx] 
-  ADD DEFAULT (Getdate()) FOR [LastUpdatedDateTime] 
-
-go 
+  ADD DEFAULT (Getdate()) FOR [LastUpdatedDateTime]
+GO 
 
 ALTER TABLE [dbo].[companytx] 
   ADD DEFAULT (Getdate()) FOR [hk_modified] 
+GO 
 
-go 
-
-CREATE NONCLUSTERED INDEX [NonClusteredIndex-20180513-064317] ON [dbo].[companytx]
+CREATE NONCLUSTERED INDEX [NCI_companyid] ON [dbo].[companytx]
 (
 	[companyid] ASC
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON)

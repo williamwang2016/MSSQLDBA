@@ -1,23 +1,8 @@
-$src_server = 'sqlserver-0'
-$tgt_server = 'sqlserver-1'
-$src_mgr_port = 7809
-$tgt_mgr_port = 7809
-$src_ogg_home = 'C:\OGG'
-$tgt_ogg_home = 'C:\OGG'
-$src_dsn = 'ogg_dsn'
-$tgt_dsn = 'ogg_dsn'
-$db_name = 'Demo'
-$extract_name = 'cdcext'
-$pump_name = 'cdcpmp'
-$local_trail_name = 'ce'
-$remote_trail_name = 'cp'
-$replicat_name = 'cdcrep'
-
+. .\Param.ps1
+. .\Util.ps1
 
 Import-Module SqlServer
 #Set-Location $PSScriptRoot
-cd 'C:\Users\ogguser\Documents\GitHub\MSSQLDBA\OGG'
-
 
 function Install-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $SourceMgrPort, $TargetComputerName, $TargetDsnName, $TargetOggHome, $TargetMgrPort, $DatabaseName, $ExtractName, $PumpName, $ReplicatName, $LocalTrailName, $RemoteTrailName) {
     ############################
@@ -349,6 +334,72 @@ function Install-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $Sour
     Invoke-Command -ComputerName $SourceComputerName -FilePath Invoke-GGSCI.ps1 -ArgumentList $SourceOggHome, $ggsci_command
     Invoke-Command -ComputerName $TargetComputerName -FilePath Invoke-GGSCI.ps1 -ArgumentList $TargetOggHome, $ggsci_command
 
+    #28. Create DDL trigger and tracking table
+    $query = @"
+        --Create tracking table in msdb and grant INSERT permission to the public role on this table
+        USE [msdb]
+        GO
+        IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'ddl_event')
+	        DROP TABLE [dbo].[ddl_event]
+        GO
+        CREATE TABLE [dbo].[ddl_event](
+	        [id] [int] IDENTITY(1,1) NOT NULL,
+	        [completion_time] [datetime] NULL,
+	        [event_data] [xml] NULL,
+         CONSTRAINT [PK_ddl_event] PRIMARY KEY CLUSTERED 
+        (
+	        [id] ASC
+        )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+        ) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+        GO
+
+        GRANT INSERT ON OBJECT::dbo.ddl_event to public
+        GO
+
+        USE [msdb]
+        GO
+        IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_NAME = 'view_ddl')
+	        DROP VIEW [dbo].[view_ddl]
+        GO
+        CREATE VIEW view_ddl
+        AS
+        SELECT id
+        , completion_time
+        , event_data.value('(/EVENT_INSTANCE/EventType)[1]','nvarchar(max)') as event_type
+        , event_data.value('(/EVENT_INSTANCE/DatabaseName)[1]','nvarchar(max)') as database_name
+        , event_data.value('(/EVENT_INSTANCE/SchemaName)[1]','nvarchar(max)') as schema_name
+        , event_data.value('(/EVENT_INSTANCE/ObjectName)[1]','nvarchar(max)') as object_name
+        , event_data.value('(/EVENT_INSTANCE/ObjectType)[1]','nvarchar(max)') as object_type
+        , event_data.value('(/EVENT_INSTANCE/TSQLCommand/CommandText)[1]','nvarchar(max)') as ddl_command
+
+        FROM msdb.dbo.ddl_event
+        GO
+
+
+        --Create a database level DDL trigger
+        --For more type of events, refer to 
+        --https://docs.microsoft.com/en-us/sql/relational-databases/triggers/ddl-event-groups?view=sql-server-2017
+        USE [$DatabaseName]
+        GO
+
+        CREATE TRIGGER [catpure_ddl]
+        ON DATABASE
+        FOR DDL_DATABASE_LEVEL_EVENTS
+        AS
+        if EVENTDATA().value('(/EVENT_INSTANCE/SchemaName)[1]','nvarchar(max)') NOT IN ('ogg','cdc') AND EVENTDATA().value('(/EVENT_INSTANCE/UserName)[1]','nvarchar(max)') <> 'cdc'
+            INSERT msdb.dbo.ddl_event(event_data) select EVENTDATA()
+
+        GO
+
+        ENABLE TRIGGER [catpure_ddl] ON DATABASE
+        GO
+
+        --USE [Demo]
+        --GO
+        --DROP TRIGGER [catpure_ddl] ON DATABASE
+        --DROP TABLE msdb.dbo.ddl_event
+"@
+    Invoke-Sqlcmd -ServerInstance $src_server -Query $query
     }
 
 function Uninstall-OGG ($SourceComputerName, $SourceDsnName, $SourceOggHome, $TargetComputerName, $TargetDsnName, $TargetOggHome, $DatabaseName) {

@@ -1,0 +1,10 @@
+DROP TABLE companytx
+GO
+DROP SEQUENCE seq_companytxid
+GO
+DROP TABLE dbo.BOAMMTx
+GO
+DROP TABLE Archive.BOAMMTx
+GO
+DROP SCHEMA Archive
+GO

@@ -1,0 +1,19 @@
+--DROP_SCHEMA
+--CREATE_INDEX
+--CREATE_TABLE
+--ALTER_TABLE
+
+DROP INDEX NCI_companyid ON dbo.companytx
+GO
+DROP TABLE dbo.CompanyTx
+GO
+DROP TABLE dbo.CCardTx
+GO
+DROP SEQUENCE seq_companytxid
+GO
+DROP TABLE dbo.BOAMMTx
+GO
+DROP TABLE Archive.BOAMMTx
+GO
+DROP SCHEMA Archive
+GO

@@ -1,9 +1,10 @@
 SELECT * FROM msdb.dbo.view_ddl WHERE is_completed = 0 ORDER BY id
 select * from msdb.dbo.ddl_event
 truncate table msdb.dbo.ddl_event
-
+EXEC Demo.[ogg].GG_UPDATE_HB_TAB
 :connect sqlserver-0
 --delete from demo.dbo.t1
+select * from demo.dbo.t2 (nolock)
 insert into demo.dbo.t1 values (1)
 go
 select count(*) from demo.dbo.t1
@@ -11,6 +12,29 @@ go
 
 :connect sqlserver-1
 select count(*) from demo.dbo.t1
+go
+
+:connect sqlserver-0
+--delete from demo.dbo.t1
+insert into demo.dbo.t2 values (1)
+go
+select count(*) from demo.dbo.t2
+go
+
+:connect sqlserver-1
+select count(*) from demo.dbo.t2
+go
+
+:connect sqlserver-0
+--delete from demo.dbo.t1
+insert into demo.dbo.t3 values (1,'ddddd', 'eeee')
+insert into demo.dbo.t3 values (1,'dddddddddddddddddddddddddddddd','eee','eee','fff')
+go
+select * from demo.dbo.t3
+go
+
+:connect sqlserver-1
+select * from demo.dbo.t3
 go
 
 select * from msdb.dbo.ddl_event
@@ -26,6 +50,12 @@ go
 select * from demo.testch.t3
 go
 
+:connect sqlserver-0
+select * from demo..[companytx]
+go
+:connect sqlserver-1
+select * from demo..[companytx]
+go
 
 SELECT id
 , is_completed

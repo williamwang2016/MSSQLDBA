@@ -1,67 +1,37 @@
-function Invoke-GGSCI ($ComputerName, $OggHome, $Command) {
-    $filename = 'ggsci_command_' + (Get-Date).ToString('yyyyMMddHHmmssfff')
-    $output_path = "$OggHome\dirout"
-    $obey_filename = $filename + '.oby'   #e.g. ggsci_command_20180512062332780.oby
-    $output_filename = $filename + '.out' #e.g. ggsci_command_20180512062332780.out
-    
-    $exp = @"
-            New-Item -Force -Path $output_path -ItemType Directory |  Out-Null
-            '$Command' | Out-File -FilePath $output_path\$obey_filename -Encoding ascii -Force
-            CMD /c echo OBEY $output_path\$obey_filename | $OggHome\ggsci.exe > $output_path\$output_filename
-            Get-Content $output_path\$output_filename
-"@
-    Invoke-Command -ComputerName $ComputerName -ScriptBlock {Invoke-Expression $Using:exp}
-}
-
-function Add-Trandata ($ComputerName, $DsnName, $OggHome, $SchemaName, $TableName) {
-    $ggsci_command = @"
-        DBLOGIN SOURCEDB $DsnName
-        ADD TRANDATA $SchemaName.$TableName
-"@
-
-    Invoke-GGSCI -ComputerName $ComputerName -OggHome $OggHome -Command $ggsci_command
-}
-
-function Delete-Trandata ($ComputerName, $DsnName, $OggHome, $SchemaName, $TableName) {
-    $ggsci_command = @"
-        DBLOGIN SOURCEDB $DsnName
-        DELETE TRANDATA $SchemaName.$TableName
-"@
-
-    Invoke-GGSCI -ComputerName $ComputerName -OggHome $OggHome -Command $ggsci_command
-}
-
-function Add-Param ($ComputerName, $OggHome, $ProcessName, $Statement){
-    $expr = "'$Statement' | Out-File $OggHome\dirprm\$ProcessName.prm -Encoding ascii -Append"
-    Invoke-Command -ComputerName $ComputerName -ScriptBlock {Invoke-Expression $Using:expr}
-}
-
-function Delete-Param ($ComputerName, $OggHome, $ProcessName, $Statement){
-
-}
+#import utilities and parameters
+. .\Util.ps1
+. .\Param.ps1
 
 function Get-DDLEvent ($ServerInstance) {
-    Invoke-Sqlcmd -ServerInstance $ServerInstance -Query 'SELECT TOP 1 * FROM msdb.dbo.view_ddl WHERE is_completed = 0 ORDER BY id'
+    Invoke-Sqlcmd -ServerInstance $ServerInstance -Query 'SELECT TOP 1 * FROM msdb.dbo.view_ddl WHERE completion_time IS NULL ORDER BY id'
 }
 
 function Update-DDLEvent ($ServerInstance, $EventID) {
-    Invoke-Sqlcmd -ServerInstance $ServerInstance -Query "UPDATE msdb.dbo.ddl_event SET is_completed = 1, completion_time = GETDATE() WHERE id = $EventID"
+    Invoke-Sqlcmd -ServerInstance $ServerInstance -Query "UPDATE msdb.dbo.ddl_event SET completion_time = GETDATE() WHERE id = $EventID"
 }
 
-$src_server = 'sqlserver-0'
-$tgt_server = 'sqlserver-1'
-$src_mgr_port = 7809
-$tgt_mgr_port = 7809
-$src_ogg_home = 'C:\OGG'
-$tgt_ogg_home = 'C:\OGG'
-$src_dsn = 'ogg_dsn'
-$tgt_dsn = 'ogg_dsn'
-$db_name = 'Demo'
-$extract_name = 'cdcext'
-$pump_name = 'cdcpmp'
-$local_trail_name = 'ce'
-$remote_trail_name = 'cp'
-$replicat_name = 'cdcrep'
+function Exists-Table ($ServerInstance, $Database, $SchemaName, $TableName) {
+    $object_id = (Invoke-Sqlcmd -ServerInstance $ServerInstance -Database $Database -Query "SELECT OBJECT_ID('$SchemaName.$TableName') AS object_id").object_id
+    if ($object_id.GetType().Name -eq 'DBNull') {
+        return $false
+    }
+    else {
+        return $true
+    }
+}
+
+function Out-DDLLog ($Command, $Path) {
+    $Command | Out-File -FilePath $Path -Append -Encoding ascii
+    'GO' | Out-File -FilePath $Path -Append -Encoding ascii
+}
+
+
+
+#path to store ddl sql script on controller machine
+$ddl_logdir = 'C:\OGG\dirsql'
+New-Item -Force -Path $ddl_logdir -ItemType Directory |  Out-Null
+$ddl_logfile = "$ddl_logdir\ddl_" + (Get-Datestr) + ".sql"
+Out-File -FilePath $ddl_logfile -Force -Encoding ascii
 
 
 $ddl_event = Get-DDLEvent -ServerInstance $src_server
@@ -70,7 +40,6 @@ while ($ddl_event -ne $null) {
 
     $id = $ddl_event.id
     $event_type = $ddl_event.event_type
-    $database_name = $ddl_event.database_name
     $ddl_command = $ddl_event.ddl_command
     $schema_name = $ddl_event.schema_name
     $object_name = $ddl_event.object_name
@@ -79,13 +48,17 @@ while ($ddl_event -ne $null) {
     switch ($event_type) {
 
         'CREATE_TABLE' {
-            Add-Trandata -ComputerName $src_server -DsnName $src_dsn -OggHome $src_ogg_home -SchemaName $schema_name -TableName $object_name
+            if (Exists-Table -ServerInstance $src_server -Database $db_name -SchemaName $schema_name -TableName $object_name) {
+                Add-Trandata -ComputerName $src_server -DsnName $src_dsn -OggHome $src_ogg_home -SchemaName $schema_name -TableName $object_name
+            }
             Break
         }
 
         'ALTER_TABLE' {
-            Delete-Trandata -ComputerName $src_server -DsnName $src_dsn -OggHome $src_ogg_home -SchemaName $schema_name -TableName $object_name
-            Add-Trandata -ComputerName $src_server -DsnName $src_dsn -OggHome $src_ogg_home -SchemaName $schema_name -TableName $object_name
+            if (Exists-Table -ServerInstance $src_server -Database $db_name -SchemaName $schema_name -TableName $object_name) {
+                Delete-Trandata -ComputerName $src_server -DsnName $src_dsn -OggHome $src_ogg_home -SchemaName $schema_name -TableName $object_name
+                Add-Trandata -ComputerName $src_server -DsnName $src_dsn -OggHome $src_ogg_home -SchemaName $schema_name -TableName $object_name
+            }
             Break
         }
 
@@ -112,24 +85,55 @@ while ($ddl_event -ne $null) {
             Delete-Param -ComputerName $tgt_server -OggHome $tgt_ogg_home -ProcessName $replicat_name -Statement $replicat_stmt
             Break
         }
+
+        'CREATE_SEQUENCE' {
+            #Stagger sequence so that one side is even number, the other side is odd number
+            $query = "SELECT start_value FROM sys.sequences WHERE name = '$object_name'"
+            $start_value = Invoke-Sqlcmd -ServerInstance $src_server -Query $query -Database $db_name
+            $new_start_value = $start_value.start_value + 1
+            $query = "ALTER SEQUENCE $schema_name.$object_name RESTART WITH $new_start_value"
+
+            #Compose a new DDL command with a staggered start value
+            $ddl_command = $ddl_command + "`r`n" + $query
+            Break
+        }
     }
     
-    #Execute DDL on target
-    Invoke-Sqlcmd -ServerInstance $tgt_server -Query $ddl_command -Database $database_name
+    #Add ddl command to ddl log
+    Out-DDLLog -Command $ddl_command -Path $ddl_logfile
 
-    #Stagger sequence so that one side is even number, the other side is odd number
-    if ($event_type -eq 'CREATE_SEQUENCE')
-    {
-        $query = "SELECT start_value FROM sys.sequences WHERE name = '$object_name'"
-        $start_value = Invoke-Sqlcmd -ServerInstance $tgt_server -Query $query -Database $database_name
-        $new_start_value = $start_value.start_value + 1
-        $query = "ALTER SEQUENCE $schema_name.$object_name RESTART WITH $new_start_value"
-        Invoke-Sqlcmd -ServerInstance $tgt_server -Query $query -Database $database_name
-    }
-
-    #Mark event as completed and update the completion time
+    #Mark event as processed in ddl_event table
     Update-DDLEvent -ServerInstance $src_server -EventID $id
 
     #Start processing the next DDL event
     $ddl_event = Get-DDLEvent -ServerInstance $src_server
 }
+
+#Start Extract on source
+Start-OggProcess -ComputerName $src_server -OggHome $src_ogg_home -ProcessName $extract_name
+
+#Execute ddl log against target
+Write-ErrorLog -log $Global:errorlog -msg "[info] Apply DDL on target $tgt_server"
+Write-ErrorLog -log $Global:errorlog -msg "Get-Content $ddl_logfile"
+Invoke-Sqlcmd -ServerInstance $tgt_server -InputFile $ddl_logfile -Database $db_name -QueryTimeout 65535
+
+#Start Replicat on target
+Start-OggProcess -ComputerName $tgt_server -OggHome $tgt_ogg_home -ProcessName $replicat_name
+
+#Start Pump on source
+Start-OggProcess -ComputerName $src_server -OggHome $src_ogg_home -ProcessName $pump_name
+
+#Validating HeartBeat
+Write-ErrorLog -log $Global:errorlog -msg "[info] Validating Heartbeat between $src_server and $tgt_server"
+if (Validate-HeartBeat -SourceServerName $src_server -TargetServerName $tgt_server -DatabaseName $db_name) {
+    Write-ErrorLog -log $Global:errorlog -msg "[info] Validated Heartbeat between $src_server and $tgt_server"
+    Write-ErrorLog -log $Global:errorlog -msg "[info] DDL replication from $src_server to $tgt_server has succeeded"
+    Write-ErrorLog -log $Global:errorlog -msg "[info] Successful"
+}
+else {
+    Write-ErrorLog -log $Global:errorlog -msg "[error] Failed to validate heartbeat between $src_server and $tgt_server"
+    Write-ErrorLog -log $Global:errorlog -msg "[error] Refer to the error log $Global:errorlog for more details"
+    Write-ErrorLog -log $Global:errorlog -msg "[error] Failed"
+    Throw "DDL replication from $src_server to $tgt_server has failed"
+}
+

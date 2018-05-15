@@ -17,5 +17,10 @@ $ggsci_command = @"
 INFO ALL
 "@
 
+$ggsci_command = @"
+DBLOGIN SOURCEDB ogg_dsn
+DELETE TRANDATA dbo.t3
+"@
+
 Invoke-GGSCI -ComputerName 'sqlserver-0' -OggHome 'c:\ogg' -Command $ggsci_command
 Invoke-GGSCI -ComputerName 'sqlserver-1' -OggHome 'c:\ogg' -Command $ggsci_command
