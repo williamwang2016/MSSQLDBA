@@ -2,7 +2,7 @@
 $sqlinstance = ''
 
 $service_account = (Invoke-Sqlcmd -ServerInstance $sqlinstance -Query "select service_account from sys.dm_server_services where filename like '%sqlservr.exe%'").service_account
-$cert = (gci -path cert:/LocalMachine/My | Where-Object {$_.SerialNumber -eq $cert_serialnumber} | Sort-Object -property NotAfter -descending | Select-Object -First 1)
+$cert = (Get-ChildItem -path cert:/LocalMachine/My | Where-Object {$_.SerialNumber -eq $cert_serialnumber} | Sort-Object -property NotAfter -descending | Select-Object -First 1)
 
 # --------------------------------------------------------
 # Grant Read permission to the SQL Service startup account

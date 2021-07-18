@@ -153,7 +153,7 @@ if ($VirtualServerName.Contains("WC"))
 #	Remove-ClusterResourceDependency -Resource "SQL Server ($InstanceName)" -Provider "$($InstanceName)_BACKUP" | Out-Null
 	(Get-ClusterResource "SQL Server agent ($InstanceName)").RestartAction = 1
 #	(Get-ClusterResource "$($InstanceName)_backup").restartaction = 1
-	if (Get-ClusterResource | ?{$_.name -eq "Analysis Services ($InstanceName)"})
+	if (Get-ClusterResource | Where-Object {$_.name -eq "Analysis Services ($InstanceName)"})
 	{
 		Remove-ClusterResourceDependency -Resource "Analysis Services ($InstanceName)" -Provider "$($InstanceName)_BACKUP" | Out-Null
 		(Get-ClusterResource "Analysis Services ($InstanceName)").restartaction = 2

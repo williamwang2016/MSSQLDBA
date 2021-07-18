@@ -28,9 +28,9 @@ New-Item "C:\install" -Force -type directory | Out-Null
 if ($action -eq "InstallFailoverCluster")
 {
 	Import-Module FailoverClusters
-	$disks = Get-ClusterResource | ?{$_.ResourceType.Name -eq "Physical Disk" -and $_.OwnerGroup.Name -eq $InstanceName}
+	$disks = Get-ClusterResource | Where-Object {$_.ResourceType.Name -eq "Physical Disk" -and $_.OwnerGroup.Name -eq $InstanceName}
 	$clusterdisks = '"'+[string]::join('" "',$disks)+'"'
-	$clusternetwork = Get-ClusterNetwork | ?{$_.role -eq 3}
+	$clusternetwork = Get-ClusterNetwork | Where-Object {$_.role -eq 3}
 	$public = $clusternetwork.Name
 	$subnet = $clusternetwork.Addressmask
 
@@ -220,7 +220,7 @@ ASSVCACCOUNT="$serviceaccountname"
 	if ($version -ne "2008" -and $version -ne "2008R2")
 	{
 		import-module failoverclusters
-		$clusternetwork = Get-ClusterNetwork | ?{$_.role -eq 3}
+		$clusternetwork = Get-ClusterNetwork | Where-Object {$_.role -eq 3}
 		$public = $clusternetwork.Name
 		$subnet = $clusternetwork.Addressmask
 		$clusterIP = @"
